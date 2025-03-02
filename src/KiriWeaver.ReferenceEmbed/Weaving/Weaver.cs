@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Reflection;
+using System.Text;
 using Microsoft.Build.Framework;
 using Mono.Cecil;
 
@@ -13,6 +14,9 @@ public class Weaver : Microsoft.Build.Utilities.Task
 	[Required]
 	public required string OutputAssembly { get; set; }
 
+    [Required]
+    public required ITaskItem[] ReferencePaths { get; set; }
+	
 	private enum AttrType : byte {
 		Config,
 		IncludeAll,
@@ -34,7 +38,6 @@ public class Weaver : Microsoft.Build.Utilities.Task
 	public override bool Execute()
 	{
 		try {
-			// throw new Exception("hi");
             using var assembly = AssemblyDefinition.ReadAssembly(InputAssembly);
 
 			const string @namespace = $"{nameof(KiriWeaver)}.{nameof(ReferenceEmbed)}";
@@ -43,7 +46,6 @@ public class Weaver : Microsoft.Build.Utilities.Task
 
 			GetIncludedFiles(info)
 				.Select(file => GetResource(assembly, file, info))
-				.Where(resource => resource is not null)
 				.ToList()
 				.ForEach(assembly.MainModule.Resources.Add);
 
@@ -112,7 +114,7 @@ public class Weaver : Microsoft.Build.Utilities.Task
 	private static EmbedInfo GetEmbedInfo(List<AttrInfo> attrs) {
 		var Prefix = nameof(ReferenceEmbed);
 		HashSet<string> Filter = [];
-		bool? ExcludeMode = false;
+		bool? ExcludeMode = null;
 		var DefaultCompression = false;
 		Dictionary<string, bool> CompressionMap = [];
 
@@ -127,16 +129,15 @@ public class Weaver : Microsoft.Build.Utilities.Task
 				ExcludeMode ??= true;
 				break;
 			case AttrType.Include: {
-				if (attr.Args.FirstOrDefault(arg => arg is string) is not string file) break;
+				if (attr.Args.FirstOrDefault(arg => arg is string) is not string name) break;
 				ExcludeMode ??= false;
-				var name = Path.GetFileNameWithoutExtension(file);
 				if (!ExcludeMode.Value) {
 					Filter.Add(name);
 				} else {
 					Filter.Remove(name);
 				}
 				if (attr.Args.FirstOrDefault(arg => arg is bool) is not bool compress) break;
-				CompressionMap.Add(file, compress);
+				CompressionMap.Add(name, compress);
 				break;
 			}
 			case AttrType.Exclude: {
@@ -151,20 +152,14 @@ public class Weaver : Microsoft.Build.Utilities.Task
 				break;
 			}
 		}
-
 		return new(Prefix + '.', Filter, ExcludeMode ?? false, DefaultCompression, CompressionMap);
-	} 
-
-	private IEnumerable<string> GetIncludedFiles(EmbedInfo info) {
-		var dir = Path.GetDirectoryName(InputAssembly);
-		if (!Directory.Exists(dir)) throw new DirectoryNotFoundException(
-			$"directory {dir} is not found");
-		return Directory.EnumerateFiles(dir, "*.dll", SearchOption.TopDirectoryOnly)
-			.Concat(Directory.EnumerateFiles(dir, "*.exe", SearchOption.TopDirectoryOnly))
-			.Where(file => info.ExcludeMode ^ info.Filter.Remove(Path.GetFileNameWithoutExtension(file)));
 	}
 
-	private static EmbeddedResource? GetResource(AssemblyDefinition assembly, string path, 
+	private IEnumerable<string> GetIncludedFiles(EmbedInfo info) => ReferencePaths
+		.Select(r => r.ItemSpec)
+		.Where(file => info.ExcludeMode ^ info.Filter.Remove(Path.GetFileNameWithoutExtension(file)));
+
+	private static EmbeddedResource GetResource(AssemblyDefinition assembly, string path, 
 		EmbedInfo info)
 	{
 		byte[] fileBytes = File.ReadAllBytes(path);
@@ -187,11 +182,9 @@ public class Weaver : Microsoft.Build.Utilities.Task
 				ManifestResourceAttributes.Public,
 				stream);
 		}
-		return assembly.MainModule.Resources.Any(res => res.Name == embedName)
-			? null
-			: new(
-				embedName,
-				ManifestResourceAttributes.Public, 
-				fileBytes);
+		return new(
+			embedName,
+			ManifestResourceAttributes.Public, 
+			fileBytes);
 	}
 }

@@ -2,9 +2,13 @@
 	<UsingTask TaskName="Weaver"
 		AssemblyFile="..\..\lib\net48\KiriWeaver.ReferenceEmbed.dll" />
 
-	<Target Name="ReferenceEmbed" BeforeTargets="Build">
+	<Target Name="ReferenceEmbed" AfterTargets="AfterBuild">
+		<ItemGroup>
+			<ResolvedReferences Include="@(ReferencePath)" />
+		</ItemGroup>
 		<Weaver 
 			InputAssembly="$(IntermediateOutputPath)$(TargetFileName)"
-			OutputAssembly="$(OutDir)$(TargetFileName)" />
+			OutputAssembly="$(OutDir)$(TargetFileName)"
+			ReferencePaths="@(ResolvedReferences)" />
 	</Target>
 </Project>

@@ -6,7 +6,7 @@ using System.Reflection;
 using KiriWeaver.ReferenceEmbed;
 
 [assembly: EmbedConfig(defaultCompress: true, prefix: nameof(TestProject))]
-[assembly: EmbedInclude("TestProject")]
+[assembly: EmbedInclude("Mono.Cecil")]
 
 namespace TestProject;
 
