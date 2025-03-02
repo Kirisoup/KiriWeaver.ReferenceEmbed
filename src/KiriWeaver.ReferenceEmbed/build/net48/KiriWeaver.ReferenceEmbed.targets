@@ -3,12 +3,9 @@
 		AssemblyFile="..\..\lib\net48\KiriWeaver.ReferenceEmbed.dll" />
 
 	<Target Name="ReferenceEmbed" AfterTargets="AfterBuild">
-		<ItemGroup>
-			<ResolvedReferences Include="@(ReferencePath)" />
-		</ItemGroup>
 		<Weaver 
 			InputAssembly="$(IntermediateOutputPath)$(TargetFileName)"
 			OutputAssembly="$(OutDir)$(TargetFileName)"
-			ReferencePaths="@(ResolvedReferences)" />
+			ReferencePaths="@(ReferencePath)" />
 	</Target>
 </Project>

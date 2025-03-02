@@ -40,15 +40,38 @@ public class Weaver : Microsoft.Build.Utilities.Task
             using var assembly = AssemblyDefinition.ReadAssembly(InputAssembly);
 
 			var info = GetEmbedInfo(assembly);
+			
+			foreach (var taskItem in ReferencePaths) {
+				var name = new AssemblyName(taskItem.GetMetadata("FusionName") ?? "!").Name;
+				if (!(info.ExcludeMode ^ info.Filter.Remove(name))) continue;
 
-			var resources = ReferencePaths
-				.Select(r => r.ItemSpec)
-				.Where(file => info.ExcludeMode ^ info.Filter.Remove(
-					Path.GetFileNameWithoutExtension(file)))
-				.Select(file => IntoResource(file, in info));
+				var embedName = info.Prefix + name;
+				bool compress = info.CompressionMap.TryGetValue(name, out var value)
+					? value
+					: info.DefaultCompression;
 
-			foreach (var resource in resources) 
+				byte[] fileBytes = File.ReadAllBytes(taskItem.ItemSpec);
+
+				EmbeddedResource resource;
+
+				if (!compress) {
+					resource = new EmbeddedResource(
+						embedName,
+						ManifestResourceAttributes.Public, 
+						fileBytes);
+				} else {
+					var stream = new MemoryStream();
+					using (var compressStream = new DeflateStream(stream, CompressionLevel.Optimal, true)) {
+						compressStream.Write(fileBytes, 0, fileBytes.Length);
+					}
+					stream.Position = 0;
+					resource = new(
+						embedName + ".compressed",
+						ManifestResourceAttributes.Public,
+						stream);
+				}
 				assembly.MainModule.Resources.Add(resource);
+			}
 
 			assembly.Write(OutputAssembly);
 			return true;
@@ -65,18 +88,20 @@ public class Weaver : Microsoft.Build.Utilities.Task
 
 	private static EmbedInfo GetEmbedInfo(AssemblyDefinition assembly) 
 	{
-		const string @namespace = $"{nameof(KiriWeaver)}.{nameof(ReferenceEmbed)}";
 		var Prefix = nameof(ReferenceEmbed);
 		HashSet<string> Filter = [];
 		bool? ExcludeMode = null;
 		var DefaultCompression = false;
 		Dictionary<string, bool> CompressionMap = [];
-		List<int> removeIdx = [];
+		List<CustomAttribute> removeAttrs = [];
 
 		for (int i = 0; i < assembly.CustomAttributes.Count; i++) {
 			var attr = assembly.CustomAttributes[i];
-			switch (attr.AttributeType.FullName) {
-				case $"{@namespace}.{nameof(EmbedConfigAttribute)}": {
+			const string @namespace = $"{nameof(KiriWeaver)}.{nameof(ReferenceEmbed)}";
+
+			if (!attr.AttributeType.FullName.StartsWith(@namespace)) continue;
+			switch (attr.AttributeType.FullName[(@namespace.Length + 1)..]) {
+				case nameof(EmbedConfigAttribute): {
 					var args = attr.ConstructorArguments.Select(arg => arg.Value);
 					if (args.FirstOrDefault(arg => arg is bool) is true)
 						DefaultCompression = true;
@@ -84,10 +109,10 @@ public class Weaver : Microsoft.Build.Utilities.Task
 						Prefix = prefix;
 					break;
 				}
-				case $"{@namespace}.{nameof(EmbedIncludeAllAttribute)}": 
+				case nameof(EmbedIncludeAllAttribute): 
 					ExcludeMode ??= true;
 					break;
-				case $"{@namespace}.{nameof(EmbedIncludeAttribute)}": {
+				case nameof(EmbedIncludeAttribute): {
 					var args = attr.ConstructorArguments.Select(arg => arg.Value);
 					if (args.FirstOrDefault(arg => arg is string) is not string name) break;
 					ExcludeMode ??= false;
@@ -100,7 +125,7 @@ public class Weaver : Microsoft.Build.Utilities.Task
 					CompressionMap.Add(name, compress);
 					break;
 				}
-				case $"{@namespace}.{nameof(EmbedExcludeAttribute)}": {
+				case nameof(EmbedExcludeAttribute): {
 					var args = attr.ConstructorArguments.Select(arg => arg.Value);
 					if (args.FirstOrDefault() is not string file) break;
 					ExcludeMode ??= true;
@@ -112,12 +137,13 @@ public class Weaver : Microsoft.Build.Utilities.Task
 					}
 					break;
 				}
+				default: continue;
 			}
+			
+			removeAttrs.Add(attr);
 		}
 
-		// remove attributes in descending order, avoiding messing up the index 
-		for (int i = removeIdx.Count - 1; i >= 0; i--)
-			assembly.CustomAttributes.RemoveAt(removeIdx[i]);
+		removeAttrs.ForEach(attr => assembly.CustomAttributes.Remove(attr));
 
 		var reference = assembly.MainModule.AssemblyReferences
 			.FirstOrDefault(r => r.Name == Assembly.GetExecutingAssembly().GetName().Name);
@@ -125,32 +151,5 @@ public class Weaver : Microsoft.Build.Utilities.Task
 			assembly.MainModule.AssemblyReferences.Remove(reference);
 
 		return new(Prefix + '.', Filter, ExcludeMode ?? false, DefaultCompression, CompressionMap);
-	}
-
-	private static EmbeddedResource IntoResource(string path, in EmbedInfo info) {
-		byte[] fileBytes = File.ReadAllBytes(path);
-		
-		var fileName = Path.GetFileNameWithoutExtension(path);
-		var embedName = info.Prefix + fileName;
-
-		bool compress = info.CompressionMap.TryGetValue(fileName, out var value)
-			? value
-			: info.DefaultCompression;
-
-		if (compress) {
-			var stream = new MemoryStream();
-			using (var compressStream = new DeflateStream(stream, CompressionLevel.Optimal, true)) {
-				compressStream.Write(fileBytes, 0, fileBytes.Length);
-			}
-			stream.Position = 0;
-			return new EmbeddedResource(
-				embedName + ".compressed",
-				ManifestResourceAttributes.Public,
-				stream);
-		}
-		return new(
-			embedName,
-			ManifestResourceAttributes.Public, 
-			fileBytes);
 	}
 }
