@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<RootNamespace>$(MSBuildProjectName)</RootNamespace>
+    	<AssemblyName>$(RootNamespace)</AssemblyName>
+
+		<Version>0.0.1</Version>
+		<Authors>KiriSoup</Authors>
+		<PackageId>$(RootNamespace)</PackageId>
+		<Description>Embed references with IL weaving</Description>
+
+		<TargetFramework>net48</TargetFramework>
+		<LangVersion>preview</LangVersion>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<PackageOutputPath>../../pkg/</PackageOutputPath>
+
+		<DefineConstants Condition="'$(Configuration)' == 'Debug'">DEBUG;TRACE</DefineConstants>
+		<DefineConstants Condition="'$(Configuration)' == 'Release'">RELEASE</DefineConstants>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="build\net48\KiriWeaver.ReferenceEmbed.targets"
+			Pack="true"
+			PackagePath="build\net48\KiriWeaver.ReferenceEmbed.targets" />
+
+		<PackageReference Include="Mono.Cecil" Version="0.11.6" />
+		<None Include="bin\Release\net48\Mono.Cecil.dll"
+			Pack="true"
+			PackagePath="lib\net48\Mono.Cecil.dll" />
+
+		<PackageReference Include="Microsoft.Build.Framework" Version="17.13.9" PrivateAssets="all" />
+		<PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.13.9" PrivateAssets="all" />
+		<PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all" />
+
+		<PackageReference Include="PolySharp" Version="1.15.0" PrivateAssets="all" 
+			IncludeAssets="runtime; build; native; contentfiles; analyzers" />
+	</ItemGroup>
+</Project>

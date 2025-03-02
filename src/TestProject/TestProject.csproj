@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+    	<OutputType>Exe</OutputType>
+		<TargetFramework>net48</TargetFramework>
+		<LangVersion>preview</LangVersion>
+		<RootNamespace>$(MSBuildProjectName)</RootNamespace>
+    	<AssemblyName>$(RootNamespace)</AssemblyName>
+
+		<DefineConstants Condition="'$(Configuration)' == 'Debug'">DEBUG;TRACE</DefineConstants>
+		<DefineConstants Condition="'$(Configuration)' == 'Release'">RELEASE</DefineConstants>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="KiriWeaver.ReferenceEmbed" Version="*" />
+	</ItemGroup>
+
+</Project>
