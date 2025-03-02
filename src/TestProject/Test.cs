@@ -5,7 +5,7 @@ using System.Linq;
 using System.Reflection;
 using KiriWeaver.ReferenceEmbed;
 
-[assembly: EmbedConfig(defaultCompress: true, prefix: nameof(TestProject))]
+[assembly: EmbedConfig(compress: true, prefix: nameof(TestProject))]
 [assembly: EmbedInclude("Mono.Cecil")]
 
 namespace TestProject;
@@ -18,7 +18,7 @@ public static class VeryRandomClass
 
 		try {
 			using var resource = Assembly.GetExecutingAssembly()
-				.GetManifestResourceStream($"{nameof(TestProject)}.TestProject.compressed");
+				.GetManifestResourceStream($"{nameof(TestProject)}.Mono.Cecil.compressed");
 			using var decompress = new DeflateStream(resource, CompressionMode.Decompress);
 			using var result = new MemoryStream();
 

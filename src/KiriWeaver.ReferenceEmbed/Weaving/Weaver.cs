@@ -35,19 +35,20 @@ public class Weaver : Microsoft.Build.Utilities.Task
 		bool DefaultCompression,
 		Dictionary<string, bool> CompressionMap);
 
-	public override bool Execute()
-	{
+	public override bool Execute() {
 		try {
             using var assembly = AssemblyDefinition.ReadAssembly(InputAssembly);
 
-			const string @namespace = $"{nameof(KiriWeaver)}.{nameof(ReferenceEmbed)}";
+			var info = GetEmbedInfo(assembly);
 
-			var info = GetEmbedInfo(TakeEmbedAttrs(assembly));
+			var resources = ReferencePaths
+				.Select(r => r.ItemSpec)
+				.Where(file => info.ExcludeMode ^ info.Filter.Remove(
+					Path.GetFileNameWithoutExtension(file)))
+				.Select(file => IntoResource(file, in info));
 
-			GetIncludedFiles(info)
-				.Select(file => GetResource(assembly, file, info))
-				.ToList()
-				.ForEach(assembly.MainModule.Resources.Add);
+			foreach (var resource in resources) 
+				assembly.MainModule.Resources.Add(resource);
 
 			assembly.Write(OutputAssembly);
 			return true;
@@ -62,44 +63,59 @@ public class Weaver : Microsoft.Build.Utilities.Task
 		}
 	}
 
-	private static List<AttrInfo> TakeEmbedAttrs(
-		AssemblyDefinition assembly)
+	private static EmbedInfo GetEmbedInfo(AssemblyDefinition assembly) 
 	{
-		List<AttrInfo> embedAttrs = [];
+		const string @namespace = $"{nameof(KiriWeaver)}.{nameof(ReferenceEmbed)}";
+		var Prefix = nameof(ReferenceEmbed);
+		HashSet<string> Filter = [];
+		bool? ExcludeMode = null;
+		var DefaultCompression = false;
+		Dictionary<string, bool> CompressionMap = [];
 		List<int> removeIdx = [];
+
 		for (int i = 0; i < assembly.CustomAttributes.Count; i++) {
 			var attr = assembly.CustomAttributes[i];
-			bool remove = true;
-
-			const string @namespace = $"{nameof(KiriWeaver)}.{nameof(ReferenceEmbed)}";
 			switch (attr.AttributeType.FullName) {
-			case $"{@namespace}.{nameof(EmbedConfigAttribute)}":
-				embedAttrs.Add(new(
-					AttrType.Config, 
-					attr.ConstructorArguments.Select(arg => arg.Value)));
-				break;
-			case $"{@namespace}.{nameof(EmbedIncludeAllAttribute)}": 
-				embedAttrs.Add(new(
-					AttrType.IncludeAll,
-					attr.ConstructorArguments.Select(arg => arg.Value)));
-				break;
-			case $"{@namespace}.{nameof(EmbedIncludeAttribute)}":
-				embedAttrs.Add(new(
-					AttrType.Include, 
-					attr.ConstructorArguments.Select(arg => arg.Value)));
-				break;
-			case $"{@namespace}.{nameof(EmbedExcludeAttribute)}":
-				embedAttrs.Add(new(
-					AttrType.Exclude, 
-					attr.ConstructorArguments.Select(arg => arg.Value)));
-				break;
-			default: 
-				remove = false;
-				break;
+				case $"{@namespace}.{nameof(EmbedConfigAttribute)}": {
+					var args = attr.ConstructorArguments.Select(arg => arg.Value);
+					if (args.FirstOrDefault(arg => arg is bool) is true)
+						DefaultCompression = true;
+					if (args.FirstOrDefault(arg => arg is string) is string prefix)
+						Prefix = prefix;
+					break;
+				}
+				case $"{@namespace}.{nameof(EmbedIncludeAllAttribute)}": 
+					ExcludeMode ??= true;
+					break;
+				case $"{@namespace}.{nameof(EmbedIncludeAttribute)}": {
+					var args = attr.ConstructorArguments.Select(arg => arg.Value);
+					if (args.FirstOrDefault(arg => arg is string) is not string name) break;
+					ExcludeMode ??= false;
+					if (!ExcludeMode.Value) {
+						Filter.Add(name);
+					} else {
+						Filter.Remove(name);
+					}
+					if (args.FirstOrDefault(arg => arg is bool) is not bool compress) break;
+					CompressionMap.Add(name, compress);
+					break;
+				}
+				case $"{@namespace}.{nameof(EmbedExcludeAttribute)}": {
+					var args = attr.ConstructorArguments.Select(arg => arg.Value);
+					if (args.FirstOrDefault() is not string file) break;
+					ExcludeMode ??= true;
+					var name = Path.GetFileNameWithoutExtension(file);
+					if (ExcludeMode.Value) {
+						Filter.Add(name);
+					} else {
+						Filter.Remove(name);
+					}
+					break;
+				}
 			}
-			if (remove) removeIdx.Add(i);
 		}
 
+		// remove attributes in descending order, avoiding messing up the index 
 		for (int i = removeIdx.Count - 1; i >= 0; i--)
 			assembly.CustomAttributes.RemoveAt(removeIdx[i]);
 
@@ -108,60 +124,10 @@ public class Weaver : Microsoft.Build.Utilities.Task
 		if (reference is not null) 
 			assembly.MainModule.AssemblyReferences.Remove(reference);
 
-		return embedAttrs;
-	}
-
-	private static EmbedInfo GetEmbedInfo(List<AttrInfo> attrs) {
-		var Prefix = nameof(ReferenceEmbed);
-		HashSet<string> Filter = [];
-		bool? ExcludeMode = null;
-		var DefaultCompression = false;
-		Dictionary<string, bool> CompressionMap = [];
-
-		foreach (var attr in attrs) switch (attr.Type) {
-			case AttrType.Config:
-				if (attr.Args.FirstOrDefault(arg => arg is bool) is true)
-					DefaultCompression = true;
-				if (attr.Args.FirstOrDefault(arg => arg is string) is string prefix)
-					Prefix = prefix;
-				break;
-			case AttrType.IncludeAll: 
-				ExcludeMode ??= true;
-				break;
-			case AttrType.Include: {
-				if (attr.Args.FirstOrDefault(arg => arg is string) is not string name) break;
-				ExcludeMode ??= false;
-				if (!ExcludeMode.Value) {
-					Filter.Add(name);
-				} else {
-					Filter.Remove(name);
-				}
-				if (attr.Args.FirstOrDefault(arg => arg is bool) is not bool compress) break;
-				CompressionMap.Add(name, compress);
-				break;
-			}
-			case AttrType.Exclude: {
-				if (attr.Args.FirstOrDefault() is not string file) break;
-				ExcludeMode ??= true;
-				var name = Path.GetFileNameWithoutExtension(file);
-				if (ExcludeMode.Value) {
-					Filter.Add(name);
-				} else {
-					Filter.Remove(name);
-				}
-				break;
-			}
-		}
 		return new(Prefix + '.', Filter, ExcludeMode ?? false, DefaultCompression, CompressionMap);
 	}
 
-	private IEnumerable<string> GetIncludedFiles(EmbedInfo info) => ReferencePaths
-		.Select(r => r.ItemSpec)
-		.Where(file => info.ExcludeMode ^ info.Filter.Remove(Path.GetFileNameWithoutExtension(file)));
-
-	private static EmbeddedResource GetResource(AssemblyDefinition assembly, string path, 
-		EmbedInfo info)
-	{
+	private static EmbeddedResource IntoResource(string path, in EmbedInfo info) {
 		byte[] fileBytes = File.ReadAllBytes(path);
 		
 		var fileName = Path.GetFileNameWithoutExtension(path);

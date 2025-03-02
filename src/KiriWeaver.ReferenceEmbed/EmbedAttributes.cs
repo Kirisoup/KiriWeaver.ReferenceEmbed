@@ -2,11 +2,11 @@ namespace KiriWeaver.ReferenceEmbed;
 
 [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = false, Inherited = false)]
 public sealed class EmbedConfigAttribute(
-	bool defaultCompress = false,
+	bool compress = false,
 	string? prefix = null
 ) : Attribute
 {
-	public bool DefaultCompress { get; } = defaultCompress;
+	public bool DefaultCompress { get; } = compress;
 	public string? Prefix { get; } = prefix;
 }
 
