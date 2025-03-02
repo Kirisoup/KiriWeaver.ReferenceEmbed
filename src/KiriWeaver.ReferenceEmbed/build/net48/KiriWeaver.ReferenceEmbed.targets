@@ -1,9 +1,9 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-	<UsingTask TaskName="Weaver"
+	<UsingTask TaskName="KiriWeaver.ReferenceEmbed.Weaving.Weaver"
 		AssemblyFile="..\..\lib\net48\KiriWeaver.ReferenceEmbed.dll" />
 
 	<Target Name="ReferenceEmbed" AfterTargets="AfterBuild">
-		<Weaver 
+		<KiriWeaver.ReferenceEmbed.Weaving.Weaver 
 			InputAssembly="$(IntermediateOutputPath)$(TargetFileName)"
 			OutputAssembly="$(OutDir)$(TargetFileName)"
 			ReferencePaths="@(ReferencePath)" />
