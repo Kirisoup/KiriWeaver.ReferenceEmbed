@@ -1,7 +1,9 @@
-using System.IO.Compression;
 using System.Reflection;
+using System.IO.Compression;
 using Microsoft.Build.Framework;
 using Mono.Cecil;
+using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 
 namespace KiriWeaver.ReferenceEmbed.Weaving;
 
@@ -9,6 +11,9 @@ public class Weaver : Microsoft.Build.Utilities.Task
 {
 	[Required]
 	public required string InputAssembly { get; set; }
+
+	[Required]
+	public required string IntermediateAssembly { get; set; }
 
 	[Required]
 	public required string OutputAssembly { get; set; }
@@ -35,8 +40,21 @@ public class Weaver : Microsoft.Build.Utilities.Task
 		Dictionary<string, bool> CompressionMap);
 
 	public override bool Execute() {
+		using (var output = Weave(File.Exists(IntermediateAssembly)
+			? IntermediateAssembly
+			: InputAssembly)) 
+		{
+			if (output is null) return false;
+			output.Write(OutputAssembly);
+		}
+
+		File.Copy(OutputAssembly, IntermediateAssembly, overwrite: true);
+		return true;
+	}
+
+	private AssemblyDefinition? Weave(string inputPath) {
 		try {
-            using var assembly = AssemblyDefinition.ReadAssembly(InputAssembly);
+			var assembly = AssemblyDefinition.ReadAssembly(inputPath);
 
 			var info = GetEmbedInfo(assembly);
 			
@@ -71,9 +89,7 @@ public class Weaver : Microsoft.Build.Utilities.Task
 				}
 				assembly.MainModule.Resources.Add(resource);
 			}
-
-			assembly.Write(OutputAssembly);
-			return true;
+			return assembly;
 		}
 		catch (Exception ex) {
 			Log.LogError($"""
@@ -81,7 +97,7 @@ public class Weaver : Microsoft.Build.Utilities.Task
 				StackTrace: 
 				{ex.StackTrace}
 				""");
-			return false;
+			return null;
 		}
 	}
 

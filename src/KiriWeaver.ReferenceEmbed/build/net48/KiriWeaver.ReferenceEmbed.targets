@@ -5,6 +5,7 @@
 	<Target Name="ReferenceEmbed" AfterTargets="AfterBuild">
 		<KiriWeaver.ReferenceEmbed.Weaving.Weaver 
 			InputAssembly="$(IntermediateOutputPath)$(TargetFileName)"
+			IntermediateAssembly = "$(IntermediateOutputPath)KiriWeaver/$(TargetFileName)"
 			OutputAssembly="$(OutDir)$(TargetFileName)"
 			ReferencePaths="@(ReferencePath)" />
 	</Target>
