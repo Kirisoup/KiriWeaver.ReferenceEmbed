@@ -24,6 +24,16 @@
 			Pack="true"
 			PackagePath="build\net48\KiriWeaver.ReferenceEmbed.targets" />
 
+		<PackageReference Include="KiriWeaver.Task" Version="*" />
+		<None Include="bin\Release\net48\KiriWeaver.Task.dll"
+			Pack="true"
+			PackagePath="lib\net48\KiriWeaver.Task.dll" />
+		
+		<PackageReference Include="KiriLib.ErrorHandling" Version="*" />
+		<None Include="bin\Release\net48\KiriLib.ErrorHandling.dll"
+			Pack="true"
+			PackagePath="lib\net48\KiriLib.ErrorHandling.dll" />
+
 		<PackageReference Include="Mono.Cecil" Version="0.11.6" />
 		<None Include="bin\Release\net48\Mono.Cecil.dll"
 			Pack="true"

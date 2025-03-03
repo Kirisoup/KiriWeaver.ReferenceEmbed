@@ -1,0 +1,3 @@
+[submodule "libs/KiriWeaver.Task"]
+	path = libs/KiriWeaver.Task
+	url = https://github.com/Kirisoup/KiriWeaver.Task.git

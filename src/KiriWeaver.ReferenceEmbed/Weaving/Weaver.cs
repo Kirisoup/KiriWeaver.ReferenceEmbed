@@ -4,57 +4,20 @@ using Microsoft.Build.Framework;
 using Mono.Cecil;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
+using KiriWeaver.Task;
+using KiriLib.ErrorHandling;
 
 namespace KiriWeaver.ReferenceEmbed.Weaving;
 
-public class Weaver : Microsoft.Build.Utilities.Task
+public sealed class Task() : WeaverTask(nameof(ReferenceEmbed))
 {
-	[Required]
-	public required string InputAssembly { get; set; }
-
-	[Required]
-	public required string IntermediateAssembly { get; set; }
-
-	[Required]
-	public required string OutputAssembly { get; set; }
-
     [Required]
     public required ITaskItem[] ReferencePaths { get; set; }
-	
-	private enum AttrType : byte {
-		Config,
-		IncludeAll,
-		Include,
-		Exclude,
-	}
 
-	private readonly record struct AttrInfo(
-		AttrType Type,
-		IEnumerable<object> Args);
-
-	private readonly record struct EmbedInfo(
-		string Prefix,
-		HashSet<string> Filter,
-		bool ExcludeMode,
-		bool DefaultCompression,
-		Dictionary<string, bool> CompressionMap);
-
-	public override bool Execute() {
-		using (var output = Weave(File.Exists(IntermediateAssembly)
-			? IntermediateAssembly
-			: InputAssembly)) 
-		{
-			if (output is null) return false;
-			output.Write(OutputAssembly);
-		}
-
-		File.Copy(OutputAssembly, IntermediateAssembly, overwrite: true);
-		return true;
-	}
-
-	private AssemblyDefinition? Weave(string inputPath) {
+	public override Result<AssemblyDefinition?, Exception> Weave(string inputAssembly)
+	{
 		try {
-			var assembly = AssemblyDefinition.ReadAssembly(inputPath);
+			var assembly = AssemblyDefinition.ReadAssembly(inputAssembly);
 
 			var info = GetEmbedInfo(assembly);
 			
@@ -89,17 +52,19 @@ public class Weaver : Microsoft.Build.Utilities.Task
 				}
 				assembly.MainModule.Resources.Add(resource);
 			}
-			return assembly;
+			return Result.Ok<AssemblyDefinition?>(assembly);
 		}
 		catch (Exception ex) {
-			Log.LogError($"""
-				{nameof(ReferenceEmbed)} weaving failed because {ex.Message}
-				StackTrace: 
-				{ex.StackTrace}
-				""");
-			return null;
+			return Result.Ex(ex);
 		}
 	}
+
+	private readonly record struct EmbedInfo(
+		string Prefix,
+		HashSet<string> Filter,
+		bool ExcludeMode,
+		bool DefaultCompression,
+		Dictionary<string, bool> CompressionMap);
 
 	private static EmbedInfo GetEmbedInfo(AssemblyDefinition assembly) 
 	{
